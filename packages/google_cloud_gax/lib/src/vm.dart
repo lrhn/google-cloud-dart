@@ -21,10 +21,20 @@ import 'dart:io';
 ///
 /// The format is either `major.minor.patch` or the special value `0`, which
 /// indicates that the version is unknown.
-final clientDartVersion = Platform.version
-    .split(RegExp('[^0-9]+'))
-    .take(3)
-    .join('.');
+final clientDartVersion = _clientDartVersion();
+
+String _clientDartVersion() {
+  const charDot = 0x2E, charZero = 0x30;  
+  final text = Platform.version;
+  for (var i = 0; i < text.length; i++) {
+    final char = text.codeUnitAt(i);
+    if (char ^ charZero > 9 && char != charDot) {
+      return text.substring(0, i);
+    }
+  }
+  return text;
+}
+    
 
 /// The environment variable with the given name.
 String? environmentVariable(String name) => Platform.environment[name];
