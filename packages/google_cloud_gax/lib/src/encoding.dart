@@ -22,13 +22,156 @@ import 'dart:convert';
 
 import '../gax.dart';
 
-/// Decode an `int64` value.
-int? decodeInt64(Object? value) =>
-    value is String ? int.parse(value) : value as int?;
+extension GaxDecode<S, T> on S {
+  T decode(T Function(S) decoder) => decoder(this);
+}
 
-/// Decode a `double` value.
-double? decodeDouble(Object? value) {
-  if (value is String) {
+extension GaxObjectConversions on Object {
+  /// Decode an `int64` value.
+  int decodeInt64() => value is String ? int.parse(value) : value as int;
+
+  /// Decode a `double` value.
+  double decodeDouble() => switch (this) {
+    'NaN' => double.nan,
+    'Infinity' => double.infinity,
+    '-Infinity' => double.negativeInfinity,
+    String _ => throw const FormatException(
+      'String value is not NaN, Infinity, or -Infinity',
+    ),
+    final value as num => value.toDouble(),
+  };
+
+  /// Decode a list of primitives types.
+  List<T>? decodeList<T>() =>
+      [... this as List<dynamic>];
+
+  /// Decode a list of `bytes`.
+  List<Uint8List>? decodeListBytes(Object? value) => 
+      [for (var (item as String) in value as List) base64Decode(item)];
+
+  /// Decode a list of [ProtoEnum]s.
+  List<T>? decodeListEnum<T extends ProtoEnum>(
+    T Function(String) decoder,
+  ) => [for (final (item as String) in (this as List)) decoder(item)];
+
+  /// Decode a list of [ProtoMessage]s.
+  List<T>? decodeListMessage<T extends ProtoMessage>(
+    T Function(Map<String, dynamic>) decoder,
+  ) => [
+    for (final (item as Map<String, dynamic>) in (this as List))
+        decoder(item),
+    ];
+
+  /// Decode a list of [ProtoMessage]s which use custom JSON encodings.
+  List<T>? decodeListMessageCustom<T extends ProtoMessage>(
+    T Function(Object) decoder,
+  ) => [for (final (item as Object) in (this as List)) decoder(item)];
+
+  /// Decode a map of primitives types.
+  Map<K, V>? decodeMap<K, V>(Object? value) => {...this as Map<dynamic, dynamic>};
+
+  /// Decode a map of [ProtoEnum]s.
+  Map<K, V>? decodeMapEnum<K, V extends ProtoEnum>(
+    V Function(String) decoder,
+  ) => {
+      for (final MapEntry(:key as K, :value as String)
+           in (this as Map).entries)
+         key: decoder(value),
+      };
+
+  /// Decode a map of `bytes`.
+  Map<K, Uint8List>? decodeMapBytes<K>() => {
+        for (final MapEntry(:key as K, :value as String)
+            in (this as Map).entries)
+          key: base64Decoder(value),
+      };
+
+
+  /// Decode a map of [ProtoMessage]s.
+  Map<K, V>? decodeMapMessage<K, V extends ProtoMessage>(
+    V Function(Map<String, dynamic>) decoder,
+  ) => {
+        for (final MapEntry(:key as K, :value as Map<String, Object?>)
+            in (this as Map).entries)
+          key: decoder(value),
+      };
+
+  /// Decode a map of using custom decoder.
+  Map<K, V>? decodeMap<K, S, V>(
+    V Function(S) decoder,
+  ) => {
+        for (final MapEntry(:key as K, :value as S)
+            in (this as Map).entries)
+          key: decoder(value),
+      };
+
+  /// Decode a map of [ProtoMessage]s which use custom JSON encodings.
+  Map<K, V>? decodeMapMessageCustom<K, V extends ProtoMessage>(
+    V Function(Object) decoder,
+  ) => {
+        for (final MapEntry(:key as K, :value as Object)
+            in (this as Map).entries)
+          key: decoder(value) as V,
+      };
+    
+}
+
+extension GaxStringConversions on String {
+  /// Decode a `bytes` value.
+  Uint8List? decodeBytes() => base64Decode(this);
+
+  /// Decode an [ProtoEnum].
+  T? decodeEnum<T extends ProtoEnum>(T Function(String) decoder) =>
+      decoder(this);
+}
+
+extension GaxMapConversions on Map<String, Object?> {
+  /// Decode a [ProtoMessage].
+  T? decode<T extends ProtoMessage>(
+    T Function(Map<String, dynamic>) decoder,
+  ) => decoder(this);
+}
+
+extension GaxIntConversion on int {
+  String encodeInt64() => "$this";
+}
+extension GaxDoubleCoversion on double {
+  /// Encode 'float` and `double` values into JSON.
+  Object? encodeDouble(double? value) => value.isFinite
+    ? value
+    : '$value';
+}
+    
+extension GaxByteConversion on Uint8List {
+  /// Encode a `bytes` value into JSON.
+  String encodeBytes() => base64Encode(this);
+}
+
+/// Encode a list of [JsonEncodable] values into JSON.
+List<Object?>? encodeList(List<JsonEncodable>? value) =>
+    value == null ? null : [for (final item in value) item.toJson()];
+
+/// Encode a list of `bytes` into JSON.
+List<Object?>? encodeListBytes(List<Uint8List>? value) =>
+    value?.map(base64Encode).toList();
+
+/// Encode a map of [JsonEncodable] values into JSON.
+Map<T, Object?>? encodeMap<T>(Map<T, JsonEncodable>? value) => value == null
+    ? null
+    : {for (final MapEntry(:key, :value) in value.entries) key: value.toJson()};
+
+/// Encode a list of `bytes` values into JSON.
+Map<T, String>? encodeMapBytes<T>(Map<T, Uint8List>? value) => value == null
+    ? null
+    : {
+        for (final MapEntry(:key, :value) in value.entries)
+          key: base64Encode(value),
+      };
+
+    
+  /// Decode a `double` value.
+  double? decodeDouble(Object? value) {
+    if (value is String) {
     if (value == 'NaN' || value == 'Infinity' || value == '-Infinity') {
       return double.parse(value);
     } else {
